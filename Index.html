@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VibeAssist Voice AI - Production</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700&display=swap');
+    
+    body {
+      background: radial-gradient(circle at center, #0a0a1a 0%, #000 100%);
+      color: #fff;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* Aura Orb Suara */
+    .orb-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .aura {
+      position: absolute;
+      width: 200px;
+      height: 200px;
+      background: rgba(59, 130, 246, 0.5);
+      border-radius: 50%;
+      filter: blur(40px);
+      transition: all 0.5s ease;
+      z-index: 1;
+    }
+
+    .listening .aura {
+      background: rgba(239, 68, 68, 0.6);
+      transform: scale(1.3);
+      filter: blur(60px);
+      animation: pulse 1s infinite alternate;
+    }
+
+    .main-btn {
+      position: relative;
+      z-index: 10;
+      width: 120px;
+      height: 120px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .main-btn:active { transform: scale(0.9); }
+
+    @keyframes pulse {
+      from { opacity: 0.5; }
+      to { opacity: 1; }
+    }
+
+    .status-badge {
+      margin-top: 3rem;
+      padding: 0.5rem 1.5rem;
+      background: rgba(255,255,255,0.1);
+      border-radius: 9999px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #60a5fa;
+      border: 1px solid rgba(96, 165, 250, 0.3);
+    }
+
+    .listening .status-badge {
+      color: #f87171;
+      border-color: rgba(248, 113, 113, 0.3);
+    }
+
+    .transcript {
+      margin-top: 1.5rem;
+      max-width: 80%;
+      text-align: center;
+      font-size: 0.95rem;
+      color: #94a3b8;
+      min-height: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="orb-wrapper" id="voice-container" onclick="handleInteraction()">
+    <div class="aura"></div>
+    <div class="main-btn">
+      <svg id="mic-icon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-blue-400"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+    </div>
+  </div>
+
+  <div class="status-badge" id="status-label">SIAP MENDENGAR</div>
+  
+  <div class="transcript" id="transcript-text">
+    Ketuk untuk mulai bicara
+  </div>
+
+  <script>
+    // GANTI INI DENGAN URL WEB APP GOOGLE ANDA (URL /exec)
+    // Pastikan URL di bawah adalah hasil dari "New Deployment" di GAS
+    const BACKEND_URL = "https://script.google.com/macros/s/AKfycbzd9dxh1Eex2HSx7crf5Hpt5b59vm6e7NQhPNk1wSa2fDk5iJkHnEd7wmU3lota8joX/exec";
+    
+    let recognition;
+    let isListening = false;
+
+    function initSpeech() {
+      const SpeechRecognition = window.webkitSpeechRecognition || window.speechRecognition;
+      if (!SpeechRecognition) {
+        alert("Browser tidak mendukung pengenalan suara.");
+        return;
+      }
+      
+      recognition = new SpeechRecognition();
+      recognition.lang = 'id-ID';
+      
+      recognition.onstart = () => {
+        isListening = true;
+        document.getElementById('voice-container').classList.add('listening');
+        document.getElementById('status-label').innerText = "MENDENGARKAN...";
+        document.getElementById('mic-icon').classList.replace('text-blue-400', 'text-red-400');
+      };
+
+      recognition.onresult = (event) => {
+        const text = event.results[0][0].transcript;
+        document.getElementById('transcript-text').innerText = `"${text}"`;
+        sendToGAS(text);
+      };
+
+      recognition.onend = () => {
+        isListening = false;
+        document.getElementById('voice-container').classList.remove('listening');
+        document.getElementById('mic-icon').classList.replace('text-red-400', 'text-blue-400');
+        if(document.getElementById('status-label').innerText === "MENDENGARKAN...") {
+          document.getElementById('status-label').innerText = "SIAP MENDENGAR";
+        }
+      };
+    }
+
+    async function handleInteraction() {
+      if (isListening) {
+        recognition.stop();
+        return;
+      }
+
+      try {
+        // Memaksa browser meminta izin (Native UI)
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (!recognition) initSpeech();
+        recognition.start();
+      } catch (err) {
+        document.getElementById('transcript-text').innerText = "Izin mikrofon diperlukan.";
+      }
+    }
+
+    function sendToGAS(text) {
+      document.getElementById('status-label').innerText = "MEMPROSES AI...";
+      
+      // Mengirim perintah ke GAS via query parameter
+      fetch(`${BACKEND_URL}?command=${encodeURIComponent(text)}`, {
+        method: 'GET',
+        mode: 'no-cors' 
+      })
+      .then(() => {
+        document.getElementById('status-label').innerText = "TUGAS SELESAI";
+        setTimeout(() => {
+          document.getElementById('status-label').innerText = "SIAP MENDENGAR";
+          document.getElementById('transcript-text').innerText = "Ketuk untuk mulai bicara";
+        }, 3000);
+      })
+      .catch(err => {
+        console.error(err);
+        document.getElementById('status-label').innerText = "ERROR HUBUNGAN API";
+      });
+    }
+
+    window.onload = initSpeech;
+  </script>
+</body>
+</html>
